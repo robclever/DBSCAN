@@ -1,0 +1,6 @@
+**/Debug
+**/packages
+*.sln
+*.config
+*.vcxproj
+*.vcxproj.user
