@@ -11,9 +11,28 @@ namespace Algorithm
     constexpr int UNDEFINED_LABEL   = -1;
     constexpr int NOISE_LABEL       =  0;
 
+    using d_func      = Algorithm::Distance::Distance_Function;
+    using eig_vectori = Eigen::VectorXi;
+
+    template <typename T,
+        typename std::enable_if_t<std::is_base_of<Eigen::MatrixBase<T>, T>::value, int> = 0>
+    class Cluster_Result
+    {
+        bool                    data_normalized;
+        T                       input_data;
+        eig_vectori             output_labels;
+        std::unique_ptr<d_func> function;
+        int                     unique_clusters;
+        double                  epsilon;
+        int                     minimum_points;
+    };
+
     /**
      * DBSCAN algorithm interface that provides context for distance function to be selected
      * on construction
+     * 
+     * TODO: Make separate derived object for semisupervised DBSCAN implementation that allows 
+     * user to specify some initial data and labels that correspond with the data.
      */
     template <typename T,
         typename std::enable_if_t<std::is_base_of<Eigen::MatrixBase<T>, T>::value, int> = 0>
@@ -26,49 +45,70 @@ namespace Algorithm
          */
     private:
         // The strategy used to cluster the data
-        std::unique_ptr<Algorithm::Distance::Distance_Function> distance_func_;
+        std::unique_ptr<d_func> distance_func_;
 
         // The data that is eventually clustered
         T input_data;
 
-        void normalize_data()
-        {
-            std::vector<double> maximums;
-            std::vector<double> minimums;
-            // Initialize Maximums/Minimums
-            for (int i = 0; i < input_data.cols(); i++)
-            {
-                maximums.push_back(std::numeric_limits<double>::min());
-                minimums.push_back(std::numeric_limits<double>::max());
-            }
+        bool data_normalized;
 
-            // TODO:
-        }
+        std::vector<double> maximums;
+        std::vector<double> minimums;
 
     public:
         explicit DBSCAN(T input,
-                        std::unique_ptr<Algorithm::Distance::Distance_Function>&& func = {}) :
+                        std::unique_ptr<d_func>&& func = {}) :
             distance_func_(std::move(func)),
-            input_data(input)
+            input_data(input),
+            data_normalized(false)
         {   
             // If the input data is not on scale [0, 1], normalization will need to be performed
+            for (int i = 0; i < input_data.rows() && data_normalized == false; i++)
+            {
+                for (int j = 0; j < input_data.cols() && data_normalized == false; j++)
+                {
+                    // Data should be in the range of [0, 1] if already normalized
+                    if ( !(input_data(i, j) >= 0 && input_data(i, j) <= 1) )
+                    {
+                        // This class needs to normalize the data prior to use
+                        data_normalized = true;
+                    }
+                }
+            }
+
+            // Scale data to range [0, 1]
+            if (data_normalized)
+            {
+                Algorithm::Operations::normalize(input_data, minimums, maximums);
+            }
+        }
+
+        bool is_data_scaled() const
+        {
+            return this->data_normalized;
         }
 
         /**
-         * Usually, the Context allows replacing a Strategy object at runtime.
+         * DBSCAN allows replacing a Strategy object at runtime.
          */
-        void set_distance_function(std::unique_ptr<Algorithm::Distance::Distance_Function>&& distance_function)
+        void set_distance_function(std::unique_ptr<d_func>&& distance_function)
         {
             distance_func_ = std::move(distance_function);
         }
 
         /**
-         * The Context delegates some work to the Strategy object instead of
-         * implementing +multiple versions of the algorithm on its own.
+         * TODO: Allow user to modify data
          */
-        Eigen::VectorXi perform_batch_cluster(const double& epsilon, const int& min_points) const
+
+
+        /**
+         * Implementation for DBSCAN "batch" clustering. This algorithm assumes that all data has been collected
+         * and sent as a whole to the implementation, given on construction.
+         *   
+         */
+        eig_vectori cluster_batch(const double& epsilon, const int& min_points) const
         {
-            Eigen::VectorXi label_data = Eigen::VectorXi::Constant(input_data.rows(), UNDEFINED_LABEL);
+            eig_vectori label_data = eig_vectori::Constant(input_data.rows(), UNDEFINED_LABEL);
             int counter_cluster = 0;
             std::vector<int> neighbors_vect;
 
@@ -104,13 +144,13 @@ namespace Algorithm
             return label_data;
         }
 
-        Eigen::VectorXi perform_sequential_cluster(const double& epsilon, 
-                                                   const int& min_points,
-                                                   const Eigen::VectorXi data_labels,
-                                                   const T& additional_points) const
+        eig_vectori cluster_sequential(const double& epsilon, 
+                                       const int& min_points,
+                                       const eig_vectori data_labels,
+                                       const T& additional_points) const
         {
             // TODO
-            return Eigen::VectorXi::Zero(1);
+            return eig_vectori::Zero(1);
         }
 
         void range_linear_scan(const int& this_point,
@@ -127,8 +167,8 @@ namespace Algorithm
             }
         }
 
-        void expand_cluster(Eigen::VectorXi& label_data,
-                            const Eigen::MatrixXd& input_data,
+        void expand_cluster(eig_vectori& label_data,
+                            const T& input_data,
                             const std::vector<int>& neighbors,
                             const int& next_cluster_label,
                             const double& epsilon,
@@ -155,7 +195,6 @@ namespace Algorithm
             }
         }
     };
-
 
 };
 
