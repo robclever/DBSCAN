@@ -1,6 +1,11 @@
 **/Debug
 **/packages
+**/.vs
 *.sln
 *.config
 *.vcxproj
 *.vcxproj.user
+*.filters
+*.gitattributes
+*dbscan_test/pch.cpp
+*dbscan_test/pch.h
