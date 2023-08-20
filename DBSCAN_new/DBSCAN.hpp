@@ -144,6 +144,56 @@ namespace Algorithm
             return label_data;
         }
 
+        eig_vectori cluster_batch(const T& supervised_data, const eig_vectori& input_labels, const double& epsilon, const int& min_points) const
+        {
+            eig_vectori label_data = eig_vectori::Constant(input_data.rows(), UNDEFINED_LABEL);
+            // Start after the labels for new clusters
+            int counter_cluster = std::max(input_labels) + 1;
+            std::vector<int> neighbors_vect;
+
+            for (int i = 0; i < input_data.rows(); i++)
+            {
+                // If the label is not set for the current point, attempt to cluster it
+                if (label_data(i) == UNDEFINED_LABEL)
+                {
+                    this->range_linear_scan(i,
+                        epsilon,
+                        neighbors_vect);
+
+                    if (neighbors_vect.size() < min_points)
+                    {
+                        label_data(i) = NOISE_LABEL;
+                    }
+                    else
+                    {
+                        // Try to fit data first to supervised dataset
+                        int matching_index = -1;
+                        eig_vectori matching_cluster = eige_vectori::Zeros(3);
+                        if (supervised_data_scan(supervised_data, i, epsilon, matching_index))
+                        {
+                            matching_cluster = input_labels(matching_index);
+                        }
+                        else
+                        {
+                            counter_cluster += 1;
+                            matching_cluster = counter_cluster;
+                        }
+
+                        // Find neighboring points that belong in the cluster
+                        this->expand_cluster(label_data,
+                            input_data,
+                            neighbors_vect,
+                            matching_cluster,
+                            epsilon,
+                            min_points);
+                    }
+                }
+                neighbors_vect.clear();
+            }
+
+            return label_data;
+        }
+
         eig_vectori cluster_sequential(const double& epsilon, 
                                        const int& min_points,
                                        const eig_vectori data_labels,
