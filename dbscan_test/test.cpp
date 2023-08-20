@@ -57,7 +57,8 @@ TEST(unsupervised, DBSCAN_basic_euclidean)
 	Eigen::VectorXi expected_output(10);
 	expected_output << 1, 1, 1, 2, 2, 2, 2, 3, 3, 3;
 
-	Eigen::VectorXi output = clustering_algorithm.cluster(0.2, 2);
+	Eigen::VectorXi output;
+	EXPECT_TRUE(clustering_algorithm.cluster(output, 0.2, 2));
 
 	EXPECT_TRUE(output.size() == expected_output.size());
 	for (int i = 0; i < expected_output.size(); i++)
@@ -86,7 +87,8 @@ TEST(unsupervised, DBSCAN_basic_noise_point)
 	Eigen::VectorXi expected_output(10);
 	expected_output << 1, 1, 1, 0, 2, 2, 2, 3, 3, 3;
 
-	Eigen::VectorXi output = clustering_algorithm.cluster(0.2, 2);
+	Eigen::VectorXi output;
+	EXPECT_TRUE(clustering_algorithm.cluster(output, 0.2, 2));
 
 	EXPECT_TRUE(output.size() == expected_output.size());
 	for (int i = 0; i < expected_output.size(); i++)
@@ -115,7 +117,8 @@ TEST(unsupervised, DBSCAN_basic_chebychev)
 	Eigen::VectorXi expected_output(10);
 	expected_output << 1, 1, 1, 0, 2, 2, 2, 3, 3, 3;
 
-	Eigen::VectorXi output = clustering_algorithm.cluster(0.2, 2);
+	Eigen::VectorXi output;
+	EXPECT_TRUE(clustering_algorithm.cluster(output, 0.2, 2));
 
 	EXPECT_TRUE(output.size() == expected_output.size());
 	for (int i = 0; i < expected_output.size(); i++)
@@ -153,7 +156,8 @@ TEST(semisupervised, DBSCAN_basic_noise_point)
 	Eigen::VectorXi expected_output(10);
 	expected_output << 1, 1, 1, 0, 2, 2, 2, 3, 3, 3;
 
-	Eigen::VectorXi output = clustering_algorithm.cluster(0.2, 2);
+	Eigen::VectorXi output;
+	EXPECT_TRUE(clustering_algorithm.cluster(output, 0.2, 2));
 
 	EXPECT_TRUE(output.size() == expected_output.size());
 	for (int i = 0; i < expected_output.size(); i++)

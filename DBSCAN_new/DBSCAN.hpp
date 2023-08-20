@@ -16,18 +16,16 @@ namespace Algorithm
 
     /**
      * DBSCAN algorithm interface that provides context for distance function to be selected
-     * on construction
-     * 
-     * TODO: Make separate derived object for semisupervised DBSCAN implementation that allows 
-     * user to specify some initial data and labels that correspond with the data.
+     * on construction. Can utilize unsupervised learning or semisupervised learning algorithm
+     * through selection of constructor.
      */
     template <typename T,
         typename std::enable_if_t<std::is_base_of<Eigen::MatrixBase<T>, T>::value, int> = 0>
     class DBSCAN
     {
         /**
-         * @var Strategy The Context maintains a reference to one of the Strategy
-         * objects. The Context does not know the concrete class of a strategy. It
+         * @var Strategy - The DBSCAN Context maintains a reference to one of the Strategy
+         * objects (Distance_Function). The Context does not know the concrete class of a strategy. It
          * should work with all strategies via the Strategy interface.
          */
     private:
@@ -94,7 +92,7 @@ namespace Algorithm
         }
 
         // Function used to find and label all neighboring points that meet DBSCAN distance criteria.
-        void expand_cluster(EVector_i& label_output,
+        void expand_cluster(EVector_i& output_labels,
                             const T& input_data,
                             const std::vector<int>& neighbors,
                             const int& next_cluster_label,
@@ -103,7 +101,7 @@ namespace Algorithm
         {
             for (int point_indx = 0; point_indx < neighbors.size(); point_indx++)
             {
-                if (label_output(neighbors[point_indx]) == UNDEFINED_LABEL)
+                if (output_labels(neighbors[point_indx]) == UNDEFINED_LABEL)
                 {
                     // Find other neighboring points that meet the distance criteria for this point
                     std::vector<int> this_point_neighbors;
@@ -113,9 +111,9 @@ namespace Algorithm
 
                     if (this_point_neighbors.size() >= min_pts)
                     {
-                        if (label_output(neighbors[point_indx]) == UNDEFINED_LABEL)
+                        if (output_labels(neighbors[point_indx]) == UNDEFINED_LABEL)
                         {
-                            label_output(neighbors[point_indx]) = next_cluster_label;
+                            output_labels(neighbors[point_indx]) = next_cluster_label;
                         }
                     }
                 }
@@ -123,6 +121,15 @@ namespace Algorithm
         }
 
     public:
+
+        /**
+         * Unsupervised DBSCAN clustering algorithm initialization
+         *
+         * @param input - the input data, with features along the columns and data entries spanning the rows
+         * @param func  - the r-value reference to the distance function strategy
+         * 
+         * @note The input parameter of type T must resolve to an eigen matrix base class type.
+         */
         DBSCAN(T input,
                std::unique_ptr<d_func>&& func = {}) :
             distance_func_(std::move(func)),
@@ -151,6 +158,17 @@ namespace Algorithm
             }
         }
 
+        /**
+         * Semi-supervised DBSCAN clustering algorithm initialization
+         *
+         * @param input - the input data, with features along the columns and data entries spanning the rows
+         * @param supervision_data - the supervision data, with features along the columns and data entries 
+         *  spanning the rows. Input data will be clustered to these data points as a basis for starting labels.
+         * @param supervision_labels - the supervision labels for the supervision data.
+         * @param func  - the r-value reference to the distance function strategy
+         *
+         * @note The input parameter of type T must resolve to an eigen matrix base class type.
+         */
         DBSCAN(T input,
                T supervision_data,
                EVector_i supervision_labels,
@@ -190,6 +208,8 @@ namespace Algorithm
 
         /**
          * DBSCAN allows replacing a Strategy object at runtime.
+         * 
+         * @param distance_function r-value unique ptr to the distance function strategy
          */
         void set_distance_function(std::unique_ptr<d_func>&& distance_function)
         {
@@ -202,77 +222,93 @@ namespace Algorithm
          *   
          * This specific overload performs clustering over the entire data set. It can perform unsupervised or semi-
          * supervised learning based on the constructor used to assign labels/training data.
+         * 
+         * @param epsilon - the minimum distance criteria to be considered a point
+         * @param min_points - the minimum number of point criteria to be considered a cluster
+         * @return the output labels (in @param output_labels) found for the given input data for clustering
          */
-        EVector_i cluster(const double& epsilon, const int& min_points) const
+        bool cluster(EVector_i& output_labels, const double& epsilon, const int& min_points) const
         {
-            EVector_i label_output = EVector_i::Constant(input_data.rows(), UNDEFINED_LABEL);
+            bool success = false;
+            output_labels = EVector_i::Constant(input_data.rows(), UNDEFINED_LABEL);
 
             int counter_cluster;
 
             if (has_labels)
             {
+                // Perform data size checking
+                if (input_data.cols() == supervision_data.cols() &&
+                    supervision_data.rows() == labels.rows())
+                {
+                    success = true;
 
-                // Start after the labels for new clusters for SS
-                counter_cluster = labels.maxCoeff() + 1;
+                    // Start after the labels for new clusters for SS
+                    counter_cluster = labels.maxCoeff() + 1;
+                }
             }
             else
             {
+                success = true;
+
                 // Start cluster labels at 0 for Unsupervised
                 counter_cluster = 0;
             }
 
-            std::vector<int> neighbors_vect;
-
-            for (int i = 0; i < input_data.rows(); i++)
+            if (success)
             {
-                // If the label is not set for the current point, attempt to cluster it
-                if (label_output(i) == UNDEFINED_LABEL)
-                {
-                    this->range_linear_scan(i,
-                                            epsilon,
-                                            neighbors_vect);
+                std::vector<int> neighbors_vect;
 
-                    if (neighbors_vect.size() < min_points)
+                for (int i = 0; i < input_data.rows(); i++)
+                {
+                    // If the label is not set for the current point, attempt to cluster it
+                    if (output_labels(i) == UNDEFINED_LABEL)
                     {
-                        label_output(i) = NOISE_LABEL;
-                    }
-                    else
-                    {
-                        // Semi-supervised learning
-                        if (has_labels)
+                        this->range_linear_scan(i,
+                                                epsilon,
+                                                neighbors_vect);
+
+                        if (neighbors_vect.size() < min_points)
                         {
-                            // Try to fit data first to supervised dataset
-                            int matching_index;
-                            int matching_cluster;
-                            if (supervision_scan(i, epsilon, matching_index))
+                            output_labels(i) = NOISE_LABEL;
+                        }
+                        else
+                        {
+                            // Semi-supervised learning
+                            if (has_labels)
                             {
-                                counter_cluster = labels(matching_index);
+                                // Try to fit data first to supervised dataset
+                                int matching_index;
+                                int matching_cluster;
+                                if (supervision_scan(i, epsilon, matching_index))
+                                {
+                                    counter_cluster = labels(matching_index);
+                                }
+                                else
+                                {
+                                    counter_cluster += 1;
+                                }
                             }
+                            // Unsupervised Learning
                             else
                             {
                                 counter_cluster += 1;
                             }
-                        }
-                        // Unsupervised Learning
-                        else
-                        {
-                            counter_cluster += 1;
-                        }
 
-                        // Find neighboring points that belong in the cluster
-                        this->expand_cluster(label_output,
-                                             input_data,
-                                             neighbors_vect,
-                                             counter_cluster,
-                                             epsilon,
-                                             min_points);
+                            // Find neighboring points that belong in the cluster
+                            this->expand_cluster(output_labels,
+                                                 input_data,
+                                                 neighbors_vect,
+                                                 counter_cluster,
+                                                 epsilon,
+                                                 min_points);
+                        }
                     }
-                }
 
-                neighbors_vect.clear();
+                    neighbors_vect.clear();
+                }
             }
 
-            return label_output;
+            return success;
         }
     };
 
